@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react'
 import { useStore } from '../store'
 
-type SoundType = 'click' | 'hover' | 'success' | 'error' | 'drop'
+type SoundType = 'click' | 'hover' | 'success' | 'error' | 'drop' | 'celebrate'
 
 export function useSound() {
   const ctxRef = useRef<AudioContext | null>(null)
@@ -20,44 +20,47 @@ export function useSound() {
       if (!soundEnabled) return
       try {
         const ctx = getCtx()
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-        osc.connect(gain)
-        gain.connect(ctx.destination)
+
+        const playNote = (freq: number, start: number, dur: number, vol = 0.12) => {
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.frequency.value = freq
+          gain.gain.setValueAtTime(vol, start)
+          gain.gain.exponentialRampToValueAtTime(0.001, start + dur)
+          osc.start(start)
+          osc.stop(start + dur)
+        }
 
         const t = ctx.currentTime
+
         switch (type) {
           case 'click':
-            osc.frequency.value = 600
-            gain.gain.setValueAtTime(0.08, t)
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08)
-            osc.start(t); osc.stop(t + 0.08)
+            playNote(600, t, 0.08, 0.08)
             break
           case 'hover':
-            osc.frequency.value = 900
-            gain.gain.setValueAtTime(0.025, t)
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04)
-            osc.start(t); osc.stop(t + 0.04)
+            playNote(900, t, 0.04, 0.025)
             break
           case 'success':
-            osc.frequency.setValueAtTime(500, t)
-            osc.frequency.setValueAtTime(700, t + 0.1)
-            gain.gain.setValueAtTime(0.1, t)
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3)
-            osc.start(t); osc.stop(t + 0.3)
+            playNote(500, t, 0.1)
+            playNote(700, t + 0.1, 0.2)
             break
           case 'error':
-            osc.frequency.value = 200
-            gain.gain.setValueAtTime(0.1, t)
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2)
-            osc.start(t); osc.stop(t + 0.2)
+            playNote(200, t, 0.2)
             break
           case 'drop':
-            osc.frequency.setValueAtTime(300, t)
-            osc.frequency.setValueAtTime(450, t + 0.05)
-            gain.gain.setValueAtTime(0.1, t)
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15)
-            osc.start(t); osc.stop(t + 0.15)
+            playNote(300, t, 0.08)
+            playNote(450, t + 0.05, 0.1)
+            break
+          case 'celebrate':
+            // Happy fanfare — rising notes
+            playNote(523, t,        0.12, 0.15) // C5
+            playNote(659, t + 0.12, 0.12, 0.15) // E5
+            playNote(784, t + 0.24, 0.12, 0.15) // G5
+            playNote(1046,t + 0.36, 0.3,  0.18) // C6
+            playNote(784, t + 0.48, 0.12, 0.12) // G5
+            playNote(1046,t + 0.6,  0.4,  0.2)  // C6 long
             break
         }
       } catch {}

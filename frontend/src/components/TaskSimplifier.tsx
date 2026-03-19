@@ -16,26 +16,45 @@ export default function TaskSimplifier({ onAddToBoard }: Props) {
   const [error, setError] = useState('')
   const [taskLabel, setTaskLabel] = useState('')
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [currentStep, setCurrentStep] = useState<number | null>(null)
   const { play } = useSound()
   const { speak, stopSpeaking, startListening, stopListening, isListening } = useSpeech()
   const settings = useStore((s) => s.settings)
 
+  // Speaks steps one by one with step highlight
+  const speakStepsSequentially = (stepsToSpeak: string[]) => {
+    setIsSpeaking(true)
+    setCurrentStep(0)
+
+    const speakNext = (index: number) => {
+      if (index >= stepsToSpeak.length) {
+        setIsSpeaking(false)
+        setCurrentStep(null)
+        return
+      }
+      setCurrentStep(index)
+      speak(
+        `Step ${index + 1}. ${stepsToSpeak[index]}`,
+        () => speakNext(index + 1)
+      )
+    }
+
+    speakNext(0)
+  }
+
   const handleSimplify = async () => {
     if (!input.trim()) { setError('Please enter a task first'); play('error'); return }
-    setError(''); setLoading(true); setSteps([]); play('click')
+    setError(''); setLoading(true); setSteps([]); setCurrentStep(null); play('click')
     try {
       const res = await simplifyTask({ task: input })
       setSteps(res.steps)
       setTaskLabel(input.substring(0, 40) + (input.length > 40 ? '…' : ''))
       onAddToBoard(res.steps)
       play('success')
-      if (settings.autoReadAloud) {
-        setIsSpeaking(true)
-        speak(
-          res.steps.map((s: string, i: number) => `Step ${i + 1}. ${s}`).join('. '),
-          () => setIsSpeaking(false)
-        )
-      }
+
+      // Auto-announce steps after simplification
+      speakStepsSequentially(res.steps)
+
     } catch (e: any) {
       const message = e?.response?.data?.detail || e?.message || 'AI error — check your API key in Settings'
       setError(message)
@@ -63,23 +82,14 @@ export default function TaskSimplifier({ onAddToBoard }: Props) {
   const handleSpeakAll = () => {
     if (!steps.length) return
     play('click')
-    setIsSpeaking(true)
-    speak(
-      steps.map((s: string, i: number) => `Step ${i + 1}. ${s}`).join('. '),
-      () => setIsSpeaking(false)
-    )
+    speakStepsSequentially(steps)
   }
 
   const handleStopSpeak = () => {
     stopSpeaking()
     setIsSpeaking(false)
+    setCurrentStep(null)
     play('error')
-  }
-
-  const priorityClasses: Record<string, string> = {
-    low: 'bg-green-100 text-green-800',
-    medium: 'bg-yellow-100 text-yellow-800',
-    high: 'bg-red-100 text-red-800',
   }
 
   return (
@@ -126,23 +136,26 @@ export default function TaskSimplifier({ onAddToBoard }: Props) {
 
           {steps.length > 0 && (
             <>
-              <button
-                onClick={handleSpeakAll}
-                onMouseEnter={() => play('hover')}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-stone-100 border border-stone-200
-                           text-stone-700 font-medium text-sm hover:bg-stone-200 transition-all active:scale-95"
-              >
-                🔊 Read All
-              </button>
-              <button
-                onClick={handleStopSpeak}
-                disabled={!isSpeaking}
-                onMouseEnter={() => play('hover')}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-100 border border-red-300
-                           text-red-700 font-medium text-sm hover:bg-red-200 transition-all active:scale-95"
-              >
-                ⏹ Stop Reading
-              </button>
+              {!isSpeaking ? (
+                <button
+                  onClick={handleSpeakAll}
+                  onMouseEnter={() => play('hover')}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-stone-100 border border-stone-200
+                             text-stone-700 font-medium text-sm hover:bg-stone-200 transition-all active:scale-95"
+                >
+                  🔊 Read All Steps
+                </button>
+              ) : (
+                <button
+                  onClick={handleStopSpeak}
+                  onMouseEnter={() => play('hover')}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-100 border border-red-300
+                             text-red-700 font-medium text-sm hover:bg-red-200 transition-all active:scale-95 animate-pulse"
+                >
+                  ⏹ Stop Reading
+                </button>
+              )}
+
               <button
                 onClick={handleAddToBoard}
                 onMouseEnter={() => play('hover')}
@@ -153,20 +166,10 @@ export default function TaskSimplifier({ onAddToBoard }: Props) {
               </button>
             </>
           )}
-          {isSpeaking && !steps.length && (
-            <button
-              onClick={handleStopSpeak}
-              onMouseEnter={() => play('hover')}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-100 border border-red-300
-                         text-red-700 font-medium text-sm hover:bg-red-200 transition-all active:scale-95"
-            >
-              ⏹ Stop Reading
-            </button>
-          )}
 
           {input && (
             <button
-              onClick={() => { setInput(''); setSteps([]); setError('') }}
+              onClick={() => { setInput(''); setSteps([]); setError(''); handleStopSpeak() }}
               onMouseEnter={() => play('hover')}
               className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-stone-100 border border-stone-200
                          text-stone-500 text-sm hover:bg-stone-200 transition-all"
@@ -176,7 +179,7 @@ export default function TaskSimplifier({ onAddToBoard }: Props) {
           )}
         </div>
 
-        {/* Focus control bar (clearer placement below simplification controls) */}
+        {/* Focus control bar */}
         <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
           <FocusMode />
         </div>
@@ -200,11 +203,35 @@ export default function TaskSimplifier({ onAddToBoard }: Props) {
                 />
               ))}
             </div>
-            <p className="text-stone-500 text-sm">AI is breaking down your task…</p>
+            <p className="text-stone-500 text-sm">AI is simplifying your task…</p>
           </div>
         )}
 
-      {/* Steps */}
+        {/* Speaking indicator */}
+        {isSpeaking && (
+          <div className="mt-4 flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+            <div className="flex gap-1">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="w-1.5 h-4 rounded-full bg-emerald-500 animate-bounce"
+                  style={{ animationDelay: `${i * 0.15}s` }}
+                />
+              ))}
+            </div>
+            <p className="text-emerald-700 text-sm font-medium">
+              {currentStep !== null ? `Reading Step ${currentStep + 1} of ${steps.length}…` : 'Reading steps…'}
+            </p>
+            <button
+              onClick={handleStopSpeak}
+              className="ml-auto text-xs px-3 py-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-all"
+            >
+              ⏹ Stop
+            </button>
+          </div>
+        )}
+
+        {/* Steps */}
         {steps.length > 0 && (
           <div className="mt-6">
             <p className="text-sm text-stone-500 mb-3">
@@ -214,17 +241,35 @@ export default function TaskSimplifier({ onAddToBoard }: Props) {
               {steps.map((step, i) => (
                 <div
                   key={i}
-                  className="flex items-start gap-3 bg-white border border-stone-200 rounded-xl p-4
-                             hover:border-stone-300 transition-all"
+                  className={`flex items-start gap-3 rounded-xl p-4 border transition-all
+                    ${currentStep === i
+                      ? 'bg-emerald-50 border-emerald-300 shadow-sm scale-[1.01]'
+                      : 'bg-white border-stone-200 hover:border-stone-300'
+                    }`}
                 >
-                  <div className="min-w-[30px] h-[30px] rounded-full bg-emerald-100 text-emerald-700
-                                  text-sm font-semibold flex items-center justify-center flex-shrink-0">
+                  <div className={`min-w-[30px] h-[30px] rounded-full text-sm font-semibold
+                                  flex items-center justify-center flex-shrink-0 transition-all
+                                  ${currentStep === i
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-emerald-100 text-emerald-700'
+                                  }`}>
                     {i + 1}
                   </div>
                   <p className="flex-1 text-base text-stone-800 leading-relaxed">{step}</p>
                   <button
                     title="Read step aloud"
-                    onClick={() => { speak(`Step ${i + 1}. ${step}`); play('click') }}
+                    onClick={() => {
+                      handleStopSpeak()
+                      setTimeout(() => {
+                        setIsSpeaking(true)
+                        setCurrentStep(i)
+                        speak(`Step ${i + 1}. ${step}`, () => {
+                          setIsSpeaking(false)
+                          setCurrentStep(null)
+                        })
+                      }, 100)
+                      play('click')
+                    }}
                     onMouseEnter={() => play('hover')}
                     className="text-stone-400 hover:text-emerald-600 transition-colors px-1 text-lg"
                   >
