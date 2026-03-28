@@ -4,6 +4,7 @@ import KanbanBoard from "./components/KanbanBoard";
 import SettingsPanel from "./components/SettingsPanel";
 import LoginPage from "./components/LoginPage";
 import AdminDashboard from "./components/AdminDashboard";
+import AIChat, { AIChatHandle } from "./components/AIChat";
 import VoicePanel from "./components/VoicePanel";
 import FocusMode, { FocusModeHandle } from "./components/FocusMode";
 import { useStore } from "./store";
@@ -13,7 +14,7 @@ import { useVoiceControl } from "./hooks/useVoiceControl";
 
 const GOOGLE_CLIENT_ID = "138386114278-crnta1rhh6t1sko25pksgbi0dtscs4eq.apps.googleusercontent.com";
 
-type Tab = "simplifier" | "board" | "settings";
+type Tab = "simplifier" | "board" | "settings" | "chat";
 
 const MOTIVATIONS = [
   { emoji: "🌟", text: "Every big task starts with one small step. You've got this!" },
@@ -36,6 +37,7 @@ const MOODS = [
 const TOUR_STEPS = [
   { title: "✨ Simplify Tasks",  desc: "Type any hard task. Our AI breaks it into easy steps for you.",     icon: "✨" },
   { title: "📋 Task Board",      desc: "See your tasks here. Move them along as you finish each one.",      icon: "📋" },
+  { title: "🤖 AI Chat",         desc: "Chat with our AI assistant! Say 'ask AI what's the weather?' or 'chat with AI'.", icon: "🤖" },
   { title: "🎤 Voice Control",   desc: "Use your voice to control everything! Say 'open board' or 'set focus 25 minutes'.", icon: "🎤" },
   { title: "⏱ Focus Timer",     desc: "Pick 15, 25, or 45 minutes of focus time. Take breaks in between.", icon: "⏱" },
   { title: "🎮 Stress Relief",   desc: "Pop bubbles, whack moles, or do breathing during your break.",      icon: "🎮" },
@@ -195,8 +197,9 @@ export default function App() {
   const { play } = useSound();
   const { stopSpeaking } = useSpeech();
 
-  // ── Ref to FocusMode for voice control ──
+  // ── Refs ──
   const focusModeRef = useRef<FocusModeHandle>(null);
+  const aiChatRef = useRef<AIChatHandle>(null);
 
   // ── Auth ──
   const [authToken, setAuthToken] = useState(() => localStorage.getItem("nd_token") || "");
@@ -327,6 +330,12 @@ export default function App() {
       case 'logout':
         handleLogout()
         break
+      case 'ai_chat':
+        setActiveTab('chat')
+        aiChatRef.current?.sendMessage(cmd.message)
+        showToast(`🤖 Asking AI: "${cmd.message}"`, 'success')
+        play('click')
+        break
       case 'unknown':
         showToast(`🎤 Didn't understand: "${cmd.transcript}" — tap ? for commands`, 'warn')
         break
@@ -336,6 +345,7 @@ export default function App() {
   const navItems: { id:Tab; label:string; icon:string }[] = [
     { id:"simplifier", label:"Simplify Task", icon:"✨" },
     { id:"board",      label:"My Tasks",      icon:"📋" },
+    { id:"chat",       label:"AI Chat",       icon:"🤖" },
     { id:"settings",   label:"Settings",      icon:"⚙️" },
   ];
 
@@ -455,6 +465,7 @@ export default function App() {
           </div>
         )}
         {activeTab === "board"    && <KanbanBoard hideDone={hideDone} />}
+        {activeTab === "chat"     && <AIChat ref={aiChatRef} />}
         {activeTab === "settings" && <SettingsPanel />}
       </main>
 

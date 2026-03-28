@@ -58,6 +58,13 @@ def init_db():
             user_email TEXT NOT NULL,
             created_at INTEGER DEFAULT (strftime('%s','now'))
         );
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_email TEXT NOT NULL,
+            role       TEXT NOT NULL,  -- 'user' or 'assistant'
+            content    TEXT NOT NULL,
+            created_at INTEGER DEFAULT (strftime('%s','now'))
+        );
     """)
     conn.commit()
     conn.close()
@@ -301,3 +308,71 @@ Task: {user_task}"""
     except Exception as e:
         print(f"❌ Groq failed: {e}")
         return {"steps": fallback_steps(user_task), "source": "fallback"}
+
+# ── AI Chat ───────────────────────────────────────────────────────────────
+@app.post("/api/chat")
+def chat(message: dict, user = Depends(get_current_user)):
+    user_message = message.get("message", "").strip()
+    if not user_message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    if not groq_client:
+        return {"response": "AI chat is not configured. Please set GROQ_API_KEY.", "source": "error"}
+
+    # Get conversation history (last 10 messages for context)
+    conn = get_db()
+    history = conn.execute("""
+        SELECT role, content FROM chat_messages 
+        WHERE user_email=? 
+        ORDER BY created_at DESC LIMIT 20
+    """, (user["email"],)).fetchall()
+    conn.close()
+
+    # Build messages array with history
+    messages = [{"role": "system", "content": "You are a helpful AI assistant. Be friendly, informative, and concise. Help with any questions or tasks."}]
+    
+    # Add history in reverse order (oldest first)
+    for row in reversed(history):
+        messages.append({"role": row["role"], "content": row["content"]})
+    
+    # Add current message
+    messages.append({"role": "user", "content": user_message})
+
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1000,
+        )
+        ai_response = response.choices[0].message.content.strip()
+        
+        # Save conversation to database
+        conn = get_db()
+        conn.execute("INSERT INTO chat_messages (user_email, role, content) VALUES (?, ?, ?)", 
+                    (user["email"], "user", user_message))
+        conn.execute("INSERT INTO chat_messages (user_email, role, content) VALUES (?, ?, ?)", 
+                    (user["email"], "assistant", ai_response))
+        conn.commit()
+        conn.close()
+        
+        return {"response": ai_response, "source": "groq"}
+        
+    except Exception as e:
+        print(f"❌ Chat failed: {e}")
+        return {"response": "Sorry, I couldn't process your message right now. Please try again.", "source": "error"}
+
+@app.get("/api/chat/history")
+def get_chat_history(user = Depends(get_current_user)):
+    conn = get_db()
+    messages = [dict(r) for r in conn.execute("""
+        SELECT role, content, created_at FROM chat_messages 
+        WHERE user_email=? 
+        ORDER BY created_at DESC LIMIT 50
+    """, (user["email"],)).fetchall()]
+    conn.close()
+    return {"messages": messages[::-1]}  # Reverse to chronological order
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

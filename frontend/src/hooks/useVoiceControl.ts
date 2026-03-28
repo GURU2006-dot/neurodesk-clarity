@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback } from 'react'
 
 export type VoiceCommand =
-  | { type: 'navigate'; tab: 'simplifier' | 'board' | 'settings' }
+  | { type: 'navigate'; tab: 'simplifier' | 'board' | 'settings' | 'chat' }
   | { type: 'timer_set_work'; minutes: number }
   | { type: 'timer_set_break'; minutes: number }
   | { type: 'timer_start' }
@@ -13,6 +13,7 @@ export type VoiceCommand =
   | { type: 'add_task'; title: string }
   | { type: 'overwhelm_mode' }
   | { type: 'logout' }
+  | { type: 'ai_chat'; message: string }
   | { type: 'unknown'; transcript: string }
 
 function parseCommand(text: string): VoiceCommand {
@@ -23,10 +24,12 @@ function parseCommand(text: string): VoiceCommand {
     if (t.match(/simplif|task simplif|break.?down|ai/)) return { type: 'navigate', tab: 'simplifier' }
     if (t.match(/board|my task|kanban|task list/))       return { type: 'navigate', tab: 'board' }
     if (t.match(/setting|preference|config/))            return { type: 'navigate', tab: 'settings' }
+    if (t.match(/chat|ai chat|talk|ask ai/))             return { type: 'navigate', tab: 'chat' }
   }
   if (t.match(/^(simplif|task simplif)/))  return { type: 'navigate', tab: 'simplifier' }
   if (t.match(/^(board|my task)/))         return { type: 'navigate', tab: 'board' }
   if (t.match(/^settings?/))               return { type: 'navigate', tab: 'settings' }
+  if (t.match(/^(chat|ai chat)/))          return { type: 'navigate', tab: 'chat' }
 
   // ── Timer: set work duration ──
   const workMatch = t.match(/(?:set|focus|work).{0,20}?(\d+)\s*(?:min|minute)?/)
@@ -67,6 +70,11 @@ function parseCommand(text: string): VoiceCommand {
 
   // ── Logout ──
   if (t.match(/log.?out|sign.?out/)) return { type: 'logout' }
+
+  // ── AI Chat ──
+  const aiMatch = t.match(/^(?:ask|tell|chat with)?\s*(?:ai|assistant)\s+(.+)$/)
+    || t.match(/^(?:ask|tell)\s+(.+?)\s+(?:to ai|to assistant)$/)
+  if (aiMatch && aiMatch[1].length > 2) return { type: 'ai_chat', message: aiMatch[1].trim() }
 
   return { type: 'unknown', transcript: text }
 }
