@@ -202,9 +202,11 @@ export default function App() {
   const aiChatRef = useRef<AIChatHandle>(null);
 
   // ── Auth ──
-  const [authToken, setAuthToken] = useState(() => localStorage.getItem("nd_token") || "");
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem("nd_token") || "guest_user");
   const [currentUser, setCurrentUser] = useState<any>(() => {
-    const u = localStorage.getItem("nd_user"); return u ? JSON.parse(u) : null;
+    const u = localStorage.getItem("nd_user"); 
+    if (u) return JSON.parse(u);
+    return { name: "Friend", email: "guest@neurodesk.local" };
   });
   const [showAdmin, setShowAdmin] = useState(false);
 
