@@ -16,15 +16,33 @@ const GOOGLE_CLIENT_ID = "138386114278-crnta1rhh6t1sko25pksgbi0dtscs4eq.apps.goo
 
 type Tab = "simplifier" | "board" | "settings" | "chat";
 
-const MOTIVATIONS = [
-  { emoji: "🌟", text: "Every big task starts with one small step. You've got this!" },
-  { emoji: "🧠", text: "Your brain works differently — and that's your superpower." },
-  { emoji: "💪", text: "Progress, not perfection. One task at a time." },
-  { emoji: "🌈", text: "You showed up today. That already makes it a good day." },
-  { emoji: "🎯", text: "Focus on what you can do right now. The rest can wait." },
-  { emoji: "🌱", text: "Small steps every day lead to big changes over time." },
-  { emoji: "✨", text: "You are more capable than you think. Start small, go far." },
-];
+const MOTIVATIONS: Record<string, { emoji: string; text: string }[]> = {
+  "Great": [
+    { emoji: "🌟", text: "You're on fire! Keep this momentum going!" },
+    { emoji: "🚀", text: "Amazing energy today. Let's tackle those tasks!" },
+    { emoji: "💎", text: "You're crushing it. This is your day!" },
+  ],
+  "Good": [
+    { emoji: "✨", text: "You're doing great. Let's build on this!" },
+    { emoji: "🎯", text: "Good vibe! You got this. Focus on one task at a time." },
+    { emoji: "💪", text: "Feeling good? Let's make something happen!" },
+  ],
+  "Okay": [
+    { emoji: "🌱", text: "That's normal. Small steps lead to big wins." },
+    { emoji: "🎯", text: "Focus on what you can do right now. The rest can wait." },
+    { emoji: "🧠", text: "Your brain works differently — and that's your superpower." },
+  ],
+  "Tired": [
+    { emoji: "☕", text: "It's okay to move slower today. Rest is productive too." },
+    { emoji: "🌙", text: "Be gentle with yourself. One small task is enough." },
+    { emoji: "🌊", text: "Tired days are part of the journey. You're still doing great!" },
+  ],
+  "Stressed": [
+    { emoji: "🧘", text: "Breathe. One task at a time. You can handle this." },
+    { emoji: "💙", text: "Stress is temporary. Break tasks into tiny steps." },
+    { emoji: "🌈", text: "You've overcome challenges before. You will again." },
+  ],
+};
 
 const MOODS = [
   { emoji: "😊", label: "Great",    color: "bg-green-100 border-green-300 text-green-700"       },
@@ -63,8 +81,16 @@ function Confetti({ active }: { active: boolean }) {
   );
 }
 
-function WelcomeScreen({ onStart, onTour, employeeName }: { onStart:()=>void; onTour:()=>void; employeeName:string }) {
-  const motivation = MOTIVATIONS[new Date().getDay() % MOTIVATIONS.length];
+function WelcomeScreen({ onStart, onTour, employeeName, currentMood }: { onStart:()=>void; onTour:()=>void; employeeName:string; currentMood: string|null }) {
+  const getMoodMotivation = (mood: string|null): { emoji: string; text: string } => {
+    if (!mood) {
+      const defaultMotivations = Object.values(MOTIVATIONS).flat();
+      return defaultMotivations[Math.floor(Math.random() * defaultMotivations.length)];
+    }
+    const moodMotivations = MOTIVATIONS[mood] || MOTIVATIONS["Okay"];
+    return moodMotivations[Math.floor(Math.random() * moodMotivations.length)];
+  };
+  const motivation = getMoodMotivation(currentMood);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-50 overflow-y-auto py-8">
       <div className="max-w-lg w-full mx-4">
@@ -271,7 +297,15 @@ export default function App() {
 
   const handleWelcomeStart = () => { localStorage.setItem("neurodesk_last_visit", new Date().toDateString()); setShowWelcome(false); setShowMood(true); };
   const handleWelcomeTour  = () => { localStorage.setItem("neurodesk_last_visit", new Date().toDateString()); setShowWelcome(false); setShowTour(true); };
-  const handleMoodClose    = (mood: string) => { setCurrentMood(mood); setShowMood(false); showToast(`${MOODS.find(m=>m.label===mood)?.emoji} Feeling ${mood} — let's have a great day!`); };
+  const handleMoodClose    = (mood: string) => { 
+    setCurrentMood(mood); 
+    setShowMood(false); 
+    const moodInfo = MOODS.find(m=>m.label===mood);
+    const motivations = MOTIVATIONS[mood] || MOTIVATIONS["Okay"];
+    const randomMotivation = motivations[Math.floor(Math.random() * motivations.length)];
+    showToast(`${moodInfo?.emoji} Got it — ${randomMotivation.text}`);
+    setShowWelcome(false);
+  };
   const handleOverwhelmDone = (id: string) => { moveTask(id, "doing"); setTimeout(() => moveTask(id, "done"), 300); play("celebrate"); };
 
   // ── Voice control ──────────────────────────────────────────────────────────
@@ -356,7 +390,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background:"#F7F5F0" }}>
-      {showWelcome   && <WelcomeScreen onStart={handleWelcomeStart} onTour={handleWelcomeTour} employeeName={settings.employeeName} />}
+      {showWelcome   && <WelcomeScreen onStart={handleWelcomeStart} onTour={handleWelcomeTour} employeeName={settings.employeeName} currentMood={currentMood} />}
       {showTour      && <GuidedTour onClose={()=>{ setShowTour(false); setShowMood(true); }} />}
       {showMood      && <MoodTracker onClose={handleMoodClose} />}
       {overwhelmMode && <OverwhelmMode onExit={()=>setOverwhelmMode(false)} tasks={tasks} onDone={handleOverwhelmDone} />}
